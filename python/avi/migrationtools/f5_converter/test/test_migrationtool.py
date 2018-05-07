@@ -92,8 +92,9 @@ setup = dict(
     vs_level_status=True,
     test_vip=None,
     output_file_path=output_file,
-    vrf = 'test_vrf',
-    segroup = 'test_se'
+    vrf='test_vrf',
+    segroup='test_se',
+    ignore_cert=None
 )
 
 mylogger = logging.getLogger()
@@ -116,7 +117,7 @@ def f5_conv(
         ansible_filter_types=None, ansible=None, prefix=None,
         convertsnat=None, not_in_use=None, baseline_profile=None,
         f5_passphrase_file=None, vs_level_status=False, test_vip=None,
-        vrf=None, segroup=None):
+        vrf=None, segroup=None, ignore_cert=None):
 
     args = Namespace(bigip_config_file=bigip_config_file,
                      skip_default_file=skip_default_file,
@@ -137,7 +138,7 @@ def f5_conv(
                      not_in_use=not_in_use, baseline_profile=baseline_profile,
                      f5_passphrase_file=f5_passphrase_file,
                      vs_level_status=vs_level_status, test_vip=test_vip,
-                     vrf=None, segroup=None)
+                     vrf=None, segroup=None, ignore_cert=None)
 
     f5_converter = F5Converter(args)
     avi_config = f5_converter.convert()

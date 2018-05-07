@@ -85,7 +85,7 @@ DUMMY_DS = {
     ]
 }
 
-DUMMY_POLICY = {
+DUMMY_REQ_POLICY = {
     'http_request_policy': {
         'rules': [
             {
@@ -116,6 +116,55 @@ DUMMY_POLICY = {
         ]
     },
     'is_internal_policy': False
+}
+
+DUMMY_NW_POLICY = {
+    'rules': [
+        {
+            'index': 1,
+            'enable': True,
+            'name': "Rule 1",
+            'action': "NETWORK_SECURITY_POLICY_ACTION_TYPE_ALLOW",
+            'match': {
+                'client_ip': {
+                    'addrs': [
+                        {
+                            'type': "V4",
+                            'addr': "1.1.1.1"
+                        }
+                    ],
+                    'match_criteria': "IS_IN"
+                }
+            },
+            'log': False
+        }
+    ]
+}
+
+HTTP_TO_HTTPS_REDIRECT_POL = {
+    "http_request_policy": {
+        "rules": [
+            {
+                "index": 1,
+                "redirect_action": {
+                    "keep_query": True,
+                    "status_code":
+                        "HTTP_REDIRECT_STATUS_CODE_302",
+                    "protocol": "HTTPS",
+                    "port": 443
+                },
+                "enable": True,
+                "name": "HTTP-To-HTTPS-Redirect",
+                "match": {
+                    "protocol": {
+                        "protocols": "HTTP",
+                        "match_criteria": "IS_IN"
+                    }
+                }
+            }
+        ]
+    },
+"is_internal_policy": False
 }
 
 def init(version):

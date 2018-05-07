@@ -2244,8 +2244,11 @@ class F5Util(MigrationUtil):
     def convert_irules(self, vs_ds_rules, rule_config, avi_config, prefix,
                        vs_name, tenant):
         vs_ds = list()
-        vs_policies = list()
+        req_policies = list()
+        nw_policy = None
         mapped_rules = []
+        converted_rules = []
+
         for rule_mapping in rule_config:
             mapped_rules.append(rule_mapping['rule_name'])
 
@@ -2256,62 +2259,61 @@ class F5Util(MigrationUtil):
                                 obj['rule_name'] == rule][0]
             if rule_mapping and rule_mapping['type'] == 'VSDataScriptSet':
                 if 'avi_config' in rule_mapping:
-                    ds_config = rule_mapping['avi_config']
+                    ds_config = copy.deepcopy(rule_mapping['avi_config'])
                 else:
-                    ds_config = conv_const.DUMMY_DS
-                    ds_config['name'] = '%s-%s-dummy' % (rule, vs_name)
+                    ds_config = copy.deepcopy(conv_const.DUMMY_DS)
+                    ds_config['name'] = '%s-%s-dummy' % (
+                        ds_config['name'], vs_name)
 
                 ds_config['tenant_ref'] = self.get_object_ref(tenant, 'tenant')
                 if prefix:
                     ds_config['name'] = '%s-%s' % (prefix, ds_config['name'])
-                avi_config['VSDataScriptSet'].append(ds_config)
+                existing_ds = [obj for obj in avi_config['VSDataScriptSet']
+                               if obj['name'] == ds_config['name']]
+                if not existing_ds:
+                    avi_config['VSDataScriptSet'].append(ds_config)
                 vs_ds.append(ds_config['name'])
+                converted_rules.append(rule)
             elif rule_mapping and rule_mapping['type'] == 'HTTPPolicySet':
                 if 'avi_config' in rule_mapping:
-                    policy = rule_mapping['avi_config']
+                    policy = copy.deepcopy(rule_mapping['avi_config'])
+                    policy['name'] = '%s-%s' % (policy['name'], vs_name)
                 else:
-                    policy = conv_const.DUMMY_POLICY
-                    policy['name'] = '%s-%s-dummy' % (rule, vs_name)
+                    policy = copy.deepcopy(conv_const.DUMMY_REQ_POLICY)
+                    policy['name'] = '%s-%s-dummy' % (policy['name'], vs_name)
 
                 policy['tenant_ref'] = self.get_object_ref(tenant, 'tenant')
                 if prefix:
                     policy['name'] = '%s-%s' % (prefix, policy['name'])
                 avi_config['HTTPPolicySet'].append(policy)
-                vs_policies.append(policy['name'])
+                req_policies.append(policy['name'])
+                converted_rules.append(rule)
+            elif rule_mapping and rule_mapping['type'] == \
+                    'NetworkSecurityPolicy':
+                if 'avi_config' in rule_mapping:
+                    policy = copy.deepcopy(rule_mapping['avi_config'])
+                    policy['name'] = '%s-%s' % (policy['name'], vs_name)
+                else:
+                    policy = copy.deepcopy(conv_const.DUMMY_NW_POLICY)
+                    policy['name'] = '%s-%s-dummy' % (policy['name'], vs_name)
+
+                policy['tenant_ref'] = self.get_object_ref(tenant, 'tenant')
+                if prefix:
+                    policy['name'] = '%s-%s' % (prefix, policy['name'])
+                avi_config['NetworkSecurityPolicy'].append(policy)
+                nw_policy = policy['name']
+                converted_rules.append(rule)
             elif (rule_mapping and rule_mapping['type'] ==
-                  'VSDataScriptSet') or rule == '_sys_https_redirect':
+                  'HTTPToHTTPSRedirect') or rule == '_sys_https_redirect':
                 # Added prefix for objects
                 if prefix:
                     policy_name = '%s-%s-%s' % (prefix, rule, vs_name)
                 else:
                     policy_name = '%s-%s' % (rule, vs_name)
-                policy = {
-                    "name": policy_name,
-                    "http_request_policy": {
-                        "rules": [
-                            {
-                                "index": 1,
-                                "redirect_action": {
-                                    "keep_query": True,
-                                    "status_code":
-                                        "HTTP_REDIRECT_STATUS_CODE_302",
-                                    "protocol": "HTTPS",
-                                    "port": 443
-                                },
-                                "enable": True,
-                                "name": policy_name + "-Redirect",
-                                "match": {
-                                    "protocol": {
-                                        "protocols": "HTTP",
-                                        "match_criteria": "IS_IN"
-                                    }
-                                }
-                            }
-                        ]
-                    },
-                    'tenant_ref': self.get_object_ref(tenant, 'tenant'),
-                    "is_internal_policy": False
-                }
-                vs_policies.append(policy_name)
+                policy = conv_const.HTTP_TO_HTTPS_REDIRECT_POL
+                policy["name"] = policy_name
+                policy['tenant_ref'] = self.get_object_ref(tenant, 'tenant'),
+                req_policies.append(policy_name)
                 avi_config['HTTPPolicySet'].append(policy)
-        return vs_ds, vs_policies
+                converted_rules.append(rule)
+        return vs_ds, req_policies, nw_policy, converted_rules

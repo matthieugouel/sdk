@@ -46,11 +46,11 @@ class ProfileConfigConv(object):
     def convert_profile(self, profile, key, f5_config, profile_config,
                         avi_config, input_dir, user_ignore, tenant_ref,
                         key_and_cert_mapping_list, merge_object_mapping,
-                        sys_dict):
+                        sys_dict, ignore_cert):
         pass
 
     def convert(self, f5_config, avi_config, input_dir, user_ignore,
-                tenant_ref, cloud_ref, merge_object_mapping, sys_dict):
+                tenant_ref, cloud_ref, merge_object_mapping, sys_dict, ignore_cert):
         """
 
         :param f5_config:  parsed f5 config dict.
@@ -104,7 +104,7 @@ class ProfileConfigConv(object):
                 self.convert_profile(
                     profile, key, f5_config, profile_config, avi_config,
                     input_dir, u_ignore, tenant, key_and_cert_mapping_list,
-                    merge_object_mapping, sys_dict)
+                    merge_object_mapping, sys_dict, ignore_cert)
                 LOG.debug("Conversion successful for profile: %s" % name)
             except:
                 update_count('error')
@@ -155,7 +155,7 @@ class ProfileConfigConv(object):
     def update_key_cert_obj(self, name, key_file_name, cert_file_name,
                             input_dir, tenant, avi_config, converted_objs,
                             default_profile_name, key_and_cert_mapping_list,
-                            merge_object_mapping, sys_dict):
+                            merge_object_mapping, sys_dict, ignore_cert):
         """
         This method create the certs if certificate not present at location
         it create dummy certificate.
@@ -241,7 +241,8 @@ class ProfileConfigConv(object):
             key_and_cert_mapping_list.append(cert_obj)
             LOG.info('Added new SSL key and certificate for %s' % name)
 
-        if ssl_kc_obj:
+        #Ignore ssl key and cert if user set the ignore cert flag to true
+        if ssl_kc_obj and not ignore_cert:
             if self.object_merge_check:
                 if 'dummy' not in ssl_kc_obj['name']:
                     conv_utils.update_skip_duplicates(ssl_kc_obj,
@@ -320,7 +321,7 @@ class ProfileConfigConvV11(ProfileConfigConv):
     def convert_profile(self, profile, key, f5_config, profile_config,
                         avi_config, input_dir, user_ignore, tenant_ref,
                         key_and_cert_mapping_list, merge_object_mapping,
-                        sys_dict):
+                        sys_dict, ignore_cert):
         """
 
         :param profile: parsed dict of profile
@@ -397,7 +398,7 @@ class ProfileConfigConvV11(ProfileConfigConv):
             parent_cls.update_key_cert_obj(
                 name, key_file, cert_file, input_dir, tenant_ref, avi_config,
                 converted_objs, default_profile_name, key_and_cert_mapping_list,
-                merge_object_mapping, sys_dict)
+                merge_object_mapping, sys_dict, ignore_cert)
 
             # ciphers = profile.get('ciphers', 'DEFAULT')
             # ciphers = 'AES:3DES:RC4' if ciphers == 'DEFAULT' else ciphers
@@ -1040,7 +1041,7 @@ class ProfileConfigConvV10(ProfileConfigConv):
     def convert_profile(self, profile, key, f5_config, profile_config,
                         avi_config, input_dir, user_ignore, tenant_ref,
                         key_and_cert_mapping_list, merge_object_mapping,
-                        sys_dict):
+                        sys_dict, ignore_cert):
         """
 
         :param profile: parsed dict of profile
@@ -1100,7 +1101,7 @@ class ProfileConfigConvV10(ProfileConfigConv):
             parent_cls.update_key_cert_obj(
                 name, key_file, cert_file, input_dir, tenant_ref, avi_config,
                 converted_objs, default_profile_name, key_and_cert_mapping_list,
-                merge_object_mapping, sys_dict)
+                merge_object_mapping, sys_dict, ignore_cert)
             ssl_profile = dict()
             ssl_profile['name'] = name
             ssl_profile['tenant_ref'] = conv_utils.get_object_ref(

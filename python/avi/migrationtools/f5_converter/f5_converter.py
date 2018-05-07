@@ -70,6 +70,8 @@ class F5Converter(AviConverter):
         self.con_snatpool = args.convertsnat
         # Added not in use flag
         self.not_in_use = args.not_in_use
+        # Added ignore cert flag
+        self.ignore_cert = args.ignore_cert
         # Added args for baseline profile json file to be changed
         self.profile_path = args.baseline_profile
         self.f5_passphrase_file = args.f5_passphrase_file
@@ -203,7 +205,7 @@ class F5Converter(AviConverter):
             self.controller_version, report_name, self.prefix,
             self.con_snatpool, user_ignore, self.profile_path,
             self.tenant, self.cloud_name, self.f5_passphrase_file,
-            self.vs_level_status, self.vrf, self.segroup)
+            self.vs_level_status, self.vrf, self.segroup, self.ignore_cert)
 
         avi_config_dict["META"] = self.meta(self.tenant,
                                             self.controller_version)
@@ -387,6 +389,9 @@ if __name__ == "__main__":
                              'authentication')
     parser.add_argument('--ignore_config',
                         help='config json to skip the config in conversion')
+    # Added command line args to ignore cert
+    parser.add_argument('--ignore_cert',
+                        help='Flag for ignore cert', action='store_true')
 
     parser.add_argument('-l', '--input_folder_location',
                         help='location of input files like cert files ' +

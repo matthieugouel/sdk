@@ -37,7 +37,7 @@ def convert(f5_config, output_dir, vs_state, input_dir, version,
             object_merge_check, controller_version, report_name, prefix,
             con_snatpool, user_ignore, profile_path, tenant='admin',
             cloud_name='Default-Cloud', keypassphrase=None,
-            vs_level_status=False, vrf=None, segroup=None):
+            vs_level_status=False, vrf=None, segroup=None, ignore_cert=False):
     """
     Converts f5 config to avi config pops the config lists for conversion of
     each type from f5 config and remaining marked as skipped in the
@@ -84,7 +84,7 @@ def convert(f5_config, output_dir, vs_state, input_dir, version,
         profile_conv = ProfileConfigConv.get_instance(
             version, f5_attributes, object_merge_check, prefix, keypassphrase)
         profile_conv.convert(f5_config, avi_config_dict, input_dir, user_ignore,
-                             tenant, cloud_name, merge_object_mapping, sys_dict)
+                             tenant, cloud_name, merge_object_mapping, sys_dict, ignore_cert)
 
         # Added ssl profile merge flag.
         mon_conv = MonitorConfigConv.get_instance(

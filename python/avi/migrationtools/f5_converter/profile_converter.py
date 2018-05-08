@@ -155,7 +155,7 @@ class ProfileConfigConv(object):
     def update_key_cert_obj(self, name, key_file_name, cert_file_name,
                             input_dir, tenant, avi_config, converted_objs,
                             default_profile_name, key_and_cert_mapping_list,
-                            merge_object_mapping, sys_dict, ignore_cert):
+                            merge_object_mapping, sys_dict):
         """
         This method create the certs if certificate not present at location
         it create dummy certificate.
@@ -242,7 +242,7 @@ class ProfileConfigConv(object):
             LOG.info('Added new SSL key and certificate for %s' % name)
 
         #Ignore ssl key and cert if user set the ignore cert flag to true
-        if ssl_kc_obj and not ignore_cert:
+        if ssl_kc_obj:
             if self.object_merge_check:
                 if 'dummy' not in ssl_kc_obj['name']:
                     conv_utils.update_skip_duplicates(ssl_kc_obj,
@@ -365,40 +365,43 @@ class ProfileConfigConvV11(ProfileConfigConv):
             skipped = [attr for attr in profile.keys()
                        if attr not in supported_attr]
             original_prof = profile_config.get(key, None)
-            inherit_key = original_prof.get('inherit-certkeychain', 'true')
-            if inherit_key == 'false':
-                profile['cert-key-chain'] = original_prof.get(
-                    "cert-key-chain", None)
-                profile['key'] = original_prof.get("key", None)
-                profile['cert'] = original_prof.get("cert", None)
+            if not ignore_cert:
+                inherit_key = original_prof.get('inherit-certkeychain', 'true')
+                if inherit_key == 'false':
+                    profile['cert-key-chain'] = original_prof.get(
+                        "cert-key-chain", None)
+                    profile['key'] = original_prof.get("key", None)
+                    profile['cert'] = original_prof.get("cert", None)
 
-            cert_obj = profile.get("cert-key-chain", None)
-            if cert_obj and cert_obj.keys():
-                cert_obj_key = cert_obj.keys()[0]
-                key_file = cert_obj.get(cert_obj_key, {}).get("key", None)
-                cert_file = cert_obj.get(cert_obj_key, {}).get("cert", None)
-            else:
-                cert_file = profile.get("cert", None)
-                key_file = profile.get("key", None)
-                cert_file = None if cert_file == 'none' else cert_file
-                key_file = None if key_file == 'none' else key_file
-            # Added for getting correct file names from cache path in sys file
-            sys_file = f5_config.get('file', {})
-            for file_key in sys_file:
-                file_type, file_name = file_key.split(' ')
-                if file_type in ('ssl-key', 'ssl-cert'):
-                    if file_type == 'ssl-key' and file_name == key_file and \
-                            sys_file[file_key].get('cache-path'):
-                        key_file = sys_file[file_key]['cache-path'].rsplit(
-                                                                    '/', 1)[-1]
-                    elif file_type == 'ssl-cert' and file_name == cert_file \
-                            and sys_file[file_key].get('cache-path'):
-                        cert_file = sys_file[file_key]['cache-path'].rsplit(
-                                                                    '/', 1)[-1]
-            parent_cls.update_key_cert_obj(
-                name, key_file, cert_file, input_dir, tenant_ref, avi_config,
-                converted_objs, default_profile_name, key_and_cert_mapping_list,
-                merge_object_mapping, sys_dict, ignore_cert)
+                cert_obj = profile.get("cert-key-chain", None)
+                if cert_obj and cert_obj.keys():
+                    cert_obj_key = cert_obj.keys()[0]
+                    key_file = cert_obj.get(cert_obj_key, {}).get("key", None)
+                    cert_file = cert_obj.get(cert_obj_key, {}).get("cert", None)
+                else:
+                    cert_file = profile.get("cert", None)
+                    key_file = profile.get("key", None)
+                    cert_file = None if cert_file == 'none' else cert_file
+                    key_file = None if key_file == 'none' else key_file
+                # Added for getting correct file names from cache path in
+                # sys file
+                sys_file = f5_config.get('file', {})
+                for file_key in sys_file:
+                    file_type, file_name = file_key.split(' ')
+                    if file_type in ('ssl-key', 'ssl-cert'):
+                        if (file_type == 'ssl-key' and file_name == key_file
+                                and sys_file[file_key].get('cache-path')):
+                            key_file = (sys_file[file_key]
+                                        ['cache-path'].rsplit('/', 1)[-1])
+                        elif (file_type == 'ssl-cert' and
+                              file_name == cert_file and
+                              sys_file[file_key].get('cache-path')):
+                            cert_file = (sys_file[file_key]
+                                         ['cache-path'].rsplit('/', 1)[-1])
+                parent_cls.update_key_cert_obj(
+                    name, key_file, cert_file, input_dir, tenant_ref,
+                    avi_config, converted_objs, default_profile_name,
+                    key_and_cert_mapping_list, merge_object_mapping, sys_dict)
 
             # ciphers = profile.get('ciphers', 'DEFAULT')
             # ciphers = 'AES:3DES:RC4' if ciphers == 'DEFAULT' else ciphers
@@ -448,7 +451,7 @@ class ProfileConfigConvV11(ProfileConfigConv):
             else:
                 ca_file_name = None
 
-            if ca_file_name:
+            if ca_file_name and not ignore_cert:
                 pki_profile = dict()
                 file_path = input_dir+os.path.sep+ca_file_name
                 pki_profile["name"] = name
@@ -1086,22 +1089,23 @@ class ProfileConfigConvV10(ProfileConfigConv):
             indirect = self.indirect_ssl
             original_prof = profile_config.get('%s %s' % (profile_type,
                                                           old_name), None)
-            inherit_key = original_prof.get('inherit-certkeychain', 'true')
-            if inherit_key == 'false':
-                profile['key'] = original_prof.get("key", None)
-                profile['cert'] = original_prof.get("cert", None)
-            cert_file = profile.get("cert", None)
-            key_file = profile.get("key", None)
-            key_file = None if key_file == 'none' else key_file
-            cert_file = None if cert_file == 'none' else cert_file
-            if key_file and cert_file:
-                key_file = key_file.replace('\"', '')
-                cert_file = cert_file.replace('\"', '')
+            if not ignore_cert:
+                inherit_key = original_prof.get('inherit-certkeychain', 'true')
+                if inherit_key == 'false':
+                    profile['key'] = original_prof.get("key", None)
+                    profile['cert'] = original_prof.get("cert", None)
+                cert_file = profile.get("cert", None)
+                key_file = profile.get("key", None)
+                key_file = None if key_file == 'none' else key_file
+                cert_file = None if cert_file == 'none' else cert_file
+                if key_file and cert_file:
+                    key_file = key_file.replace('\"', '')
+                    cert_file = cert_file.replace('\"', '')
 
-            parent_cls.update_key_cert_obj(
-                name, key_file, cert_file, input_dir, tenant_ref, avi_config,
-                converted_objs, default_profile_name, key_and_cert_mapping_list,
-                merge_object_mapping, sys_dict, ignore_cert)
+                parent_cls.update_key_cert_obj(
+                    name, key_file, cert_file, input_dir, tenant_ref,
+                    avi_config, converted_objs, default_profile_name,
+                    key_and_cert_mapping_list, merge_object_mapping, sys_dict)
             ssl_profile = dict()
             ssl_profile['name'] = name
             ssl_profile['tenant_ref'] = conv_utils.get_object_ref(

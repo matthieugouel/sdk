@@ -1895,11 +1895,34 @@ object will be cloned to the destination.
 This behaviour can be overridden using the "forceclone" option, which ensures
 that the specified references are always cloned rather than re-used.
 
-For example, to forcibly clone health monitors, use the option:
+For example, to forcibly clone all health monitors, use the option:
 
---forceclone health_monitor_refs
+--forceclone pool-healthmonitor
 
 The full list of supported options is displayed in the help.
+
+Examples:
+
+* Cloning a VS and child objects within a tenant:
+
+clone_vs.py -c controller.acme.com -x 17.2.9 vs example cloned-example
+
+* Cloning a VS and child objects to a different tenant:
+
+clone_vs.py -c controller.acme.com -x 17.2.9 vs example cloned-example
+  -t tenant1 -2t tenant2
+
+* Cloning a VS but forcing health monitors and application profiles to
+be cloned rather than re-used in the cloned VS:
+
+clone_vs.py -c controller.acme.com -x 17.2.9 vs example cloned-example
+  -fc pool-healthmonitor,vs-appprofile
+
+* Cloning an application profile to a different tenant on a different
+  controller:
+
+clone_vs.py -c controller1.acme.com -dc controller2.acme.com -x 17.2.9
+  generic health-monitor cloned-health-monitor -t tenant1 -2t tenant2
 
 If the object to be cloned uses features specific to a particular minimum Avi
 Vantage s/w release, it may be necessary to specify the API version using the

@@ -1897,7 +1897,7 @@ that the specified references are always cloned rather than re-used.
 
 For example, to forcibly clone health monitors, use the option:
 
---forceclone health_monitor_refs
+--forceclone pool-healthmonitor
 
 The full list of supported options is displayed in the help.
 

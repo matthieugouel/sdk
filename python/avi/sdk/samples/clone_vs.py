@@ -1843,7 +1843,10 @@ if __name__ == '__main__':
                 spprint('%2d. %s' % (index + 1, action), '    ')
 
             if args.dryrun:
-                input('Dry-run: Hit ENTER to delete all cloned objects')
+                try:
+                    input('Dry-run: Hit ENTER to delete all cloned objects')
+                except:
+                    pass
                 cl.delete_objects(objs=all_created_objs,
                                   tenant=args.totenant or args.tenant)
 

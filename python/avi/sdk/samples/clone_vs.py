@@ -150,7 +150,6 @@ class AviClone:
 
         self._delete_created_objs(objs, tenant_uuid)
 
-
     def clone_object(self, old_name, new_name, object_type=None, tenant=None,
                      other_tenant=None, other_cloud=None,
                      force_clone=None, force_unique_name=False,
@@ -244,11 +243,17 @@ class AviClone:
                                                 new_name)
 
         if old_name.startswith(object_type + '/'):
-            old_obj = self.api.get(old_name, tenant_uuid=tenant_uuid).json()
+            old_obj = self.api.get(old_name, tenant_uuid=tenant_uuid,
+                                   params=('export_key=true'
+                                       if object_type=='sslkeyandcertificate'
+                                       else None)).json()
             old_name = old_obj['name']
         else:
             old_obj = self.api.get_object_by_name(object_type, old_name,
-                                                  tenant_uuid=tenant_uuid)
+                                 params=('export_key=true'
+                                         if object_type=='sslkeyandcertificate'
+                                         else None),
+                                 tenant_uuid=tenant_uuid)
 
         if not old_obj:
             raise Exception('Object of type %s named %s could not be found'
@@ -1484,7 +1489,7 @@ if __name__ == '__main__':
     parser.add_argument('-dryrun', help='Allows a dry-run to be performed. '
                                         'Performs the clone, then waits '
                                         'for user input and then deletes '
-                                        'the created objects.',
+                                        'the created objects',
                         action='store_true')
     type_parser = parser.add_subparsers(help='Type of object to clone',
                                 metavar='object_type', dest='obj_type')
@@ -1937,15 +1942,6 @@ Some known limitations:
 * Cloning a VS to a cloud of a different type to the source cloud is more
   likely to fail as it may reference shared objects which do not make sense in
   the destination cloud
-* Cloning an application profile with caching/compression policies to a
-  different tenant or controller will not work currently. As a workaround,
-  manually pre-create an application profile with the same name in the target
-  prior to cloning the VS.
-  currently succeed in most cases. This can be worked around
-* Cloning of an SSL/TLS certificate will not succeed due to the private key
-  being protected. If cloning between tenants or to a different controller,
-  ensure an SSL/TLS certificate with the same name as the source is available
-  in the destination prior to cloning.
 * Cloning a VS to a different tenant/cloud will try to find an SE group with
   the same name as referenced in the source VS but if no match is found, will
   place into the Default SE group instead

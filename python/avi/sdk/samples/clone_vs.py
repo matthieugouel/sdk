@@ -1501,7 +1501,7 @@ if __name__ == '__main__':
     vs_parser.add_argument('-v', '--vips',
           help='The new VIP or list of VIPs (optionally specify list of FIPs '
           'after ;) or * for auto-allocation', metavar='VIPs', default='*')
-    vs_parser.add_argument('-d', '--fqdns',
+    vs_parser.add_argument('-dn', '--fqdns',
         help='The new FQDN or list of FQDNs or * to derive from the VS name',
                            metavar='FQDNs', default='')
     vs_parser.add_argument('-e', '--enable',

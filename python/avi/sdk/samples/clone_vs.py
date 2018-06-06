@@ -1048,7 +1048,7 @@ class AviClone:
                  new_vs_vips=None, new_vs_fips=None, new_fqdns=None,
                  new_segroup=None, tenant=None, other_tenant=None,
                  other_cloud=None, force_clone=None,
-                 force_unique_name=False):
+                 use_internal_ipam=False):
 
         """
         Clones a virtual service object
@@ -1064,7 +1064,9 @@ class AviClone:
         :param enable_vs: Whether the cloned VS should be enabled
         :param new_vs_vips: List of VIPs for cloned VS or ['*'] to use
                             auto-allocation for VIPs and FIPs (source VS must
-                            also use auto-allocation)
+                            also use auto-allocation) or specify a list
+                            of subnets/masks to auto-allocate in different
+                            networks than the source - see use_internal_ipam
         :param new_vs_fips: List of FIPs for cloned VS or [None] if FIPs are
                             not used (must have same number of elements as
                             new_vs_vips if specified)
@@ -1081,8 +1083,11 @@ class AviClone:
         :param force_clone: List of referenced object attributes to forcibly
                             clone rather than re-use (for example
                             health_monitor_refs)
-        :param force_unique_name: Resolve destination name conflicts by
-                                    appending an index number
+        :param use_internal_ipam: When auto-allocating from different subnets
+                                  than the source VS, allocate from internal
+                                  Avi IPAM/Infoblox - should be False for clouds
+                                  where allocation comes from cloud itself, e.g.
+                                  OpenStack, public clouds
         :return: tuple - json representation of the cloned VS object, list of
                     additional objects created if any
         :rtype: tuple
@@ -1096,7 +1101,7 @@ class AviClone:
 
         force_clone = force_clone or []
         new_vs_vips = new_vs_vips or ['*']
-        new_vs_fips = new_vs_fips or [None]
+        new_vs_fips = new_vs_fips or [None * len(new_vs_vips)]
         new_fqdns = new_fqdns or ['*']
 
         if tenant is None:
@@ -1170,30 +1175,69 @@ class AviClone:
                 if 'vip' in v_obj:
                     v_obj.pop('vip', None)
                     v_obj.pop('vsvip_ref', None)
-                    if new_vs_fips == [None]:
-                        v_obj['vip'] = [{'auto_allocate_ip': False,
-                                'enabled': True, 'vip_id': str(c+1),
-                                'ip_address': {'type': 'V4', 'addr':
-                                new_vs_vip}} for c, new_vs_vip in
-                                         enumerate(new_vs_vips)]
-                    else:
-                        v_obj['vip'] = [{'auto_allocate_ip': False,
-                                'auto_allocate_fip': False, 'enabled': True,
-                                'vip_id': str(c+1), 'ip_address': {'type': 'V4',
-                                'addr': new_vs_vip}, 'floating_ip': {
-                                'type': 'V4', 'addr': new_vs_fip}} for c,
-                                (new_vs_vip, new_vs_fip) in enumerate(zip(
-                                                    new_vs_vips, new_vs_fips))]
+                    v_obj['vip'] = []
+                    for c, (new_vs_vip, new_vs_fip) in enumerate(
+                                                zip(new_vs_vips, new_vs_fips)):
+                        new_vip = {'enabled': True,
+                                    'vip_id': str(c+1)}
+                        if '/' in new_vs_vip:
+                            new_vip['auto_allocate_ip'] = True
+                            subnet = new_vs_vip.split('/')
+                            if use_internal_ipam:
+                                new_vip['ipam_network_subnet'] = {'subnet': {
+                                                       'ip_addr': {
+                                                           'type': 'V4',
+                                                           'addr': subnet[0]},
+                                                       'mask': int(subnet[1])}}
+                            else:
+                                new_vip['subnet'] = {'ip_addr': {
+                                                         'type': 'V4',
+                                                         'addr': subnet[0]},
+                                                     'mask': int(subnet[1])}
+                        else:
+                            new_vip['auto_allocate_ip'] = False
+                            new_vip['ip_address'] = {'type': 'V4',
+                                                     'addr': new_vs_vip}
+                        if new_vs_fip:
+                            if new_vs_fip == '*':
+                                new_vip['auto_allocate_floating_ip'] = True
+                            else:
+                                new_vip['auto_allocate_floating_ip'] = False
+                                new_vip['floating_ip'] = {'type': 'V4',
+                                                          'addr': new_vs_fip}
+                        else:
+                            new_vip['auto_allocate_floating_ip'] = False
+                        v_obj['vip'].append(new_vip)
                 else:
-                    v_obj['auto_allocate_ip'] = False
-                    v_obj['auto_allocate_fip'] = False
-                    v_obj.pop('discovered_networks', None)
-                    v_obj['ip_address'] = {'type': 'V4', 'addr': new_vs_vips[0]}
-                    if new_vs_fips is None:
-                        v_obj.pop('floating_ip', None)
+                    if '/' in new_vs_vips[0]:
+                        v_obj['auto_allocate_ip'] = True
+                        subnet = new_vs_vips[0].split('/')
+                        if use_internal_ipam:
+                            v_obj['ipam_network_subnet'] = {'subnet': {
+                                           'ip_addr': {'type': 'V4',
+                                                       'addr': subnet[0]},
+                                           'mask': int(subnet[1])}}
+                        else:
+                            v_obj['subnet'] = {'ip_addr': {'type': 'V4',
+                                                           'addr': subnet[0]},
+                                               'mask': int(subnet[1])}
+                        v_obj.pop('subnet_uuid', None)
+                        v_obj.pop('network_ref', None)
                     else:
-                        v_obj['floating_ip'] = {'type': 'V4',
-                                                'addr': new_vs_fips[0]}
+                        v_obj['auto_allocate_ip'] = False
+                        v_obj['ip_address'] = {'type': 'V4',
+                                               'addr': new_vs_vips[0]}
+                    if new_vs_fips[0]:
+                        if new_vs_fips[0] == '*':
+                            v_obj['auto_allocate_floating_ip'] = True
+                        else:
+                            v_obj['auto_allocate_floating_ip'] = False
+                            v_obj['floating_ip'] = {'type': 'V4',
+                                                    'addr': new_vs_fips[0]}
+                    else:
+                        v_obj['auto_allocate_floating_ip'] = False
+
+                    v_obj.pop('discovered_networks', None)
 
             # Allocate new FQDNs or create a single FQDN derived from the first
             # FQDN, replacing the hostname part with the new VS name
@@ -1262,7 +1306,7 @@ class AviClone:
 
             if oc_obj:
                 v_obj['cloud_ref'] = oc_obj['url']
-                v_obj.pop('cloud_type')
+                v_obj.pop('cloud_type', None)
 
                 # If moving to a different cloud and a new SE group is not
                 # specified, try to find an SE group
@@ -1500,7 +1544,12 @@ if __name__ == '__main__':
                help='Name(s) to be assigned to the cloned Virtual Service(s)')
     vs_parser.add_argument('-v', '--vips',
           help='The new VIP or list of VIPs (optionally specify list of FIPs '
-          'after ;) or * for auto-allocation', metavar='VIPs', default='*')
+          'after ;) or * or subnet/mask for auto-allocation', metavar='VIPs',
+          default='*')
+    vs_parser.add_argument('-int', '--internalipam',
+          help='For auto-allocation specifying subnet/mask, allocate '
+               'from internal Avi IPAM/Infoblox, e.g. for VMWare Clouds',
+               action='store_true')
     vs_parser.add_argument('-dn', '--fqdns',
         help='The new FQDN or list of FQDNs or * to derive from the VS name',
                            metavar='FQDNs', default='')
@@ -1619,7 +1668,7 @@ if __name__ == '__main__':
                                     'controller' % args.obj_type)
 
                 while not password2:
-                    password = getpass.getpass('Password for %s@%s:' %
+                    password2 = getpass.getpass('Password for %s@%s:' %
                                                (user2, controller2))
 
             # Create the API session
@@ -1660,7 +1709,7 @@ if __name__ == '__main__':
                 vipsfips = args.vips.split(';')
                 vips = (['*'] * num_new_vs
                         if args.vips == '*' else vipsfips[0].split(','))
-                fips = ([None] * num_new_vs
+                fips = ([None] * len(vips)
                         if (args.vips == '*' or len(vipsfips) == 1)
                         else vipsfips[1].split(','))
                 fqdns = (['*'] * num_new_vs
@@ -1699,12 +1748,14 @@ if __name__ == '__main__':
                                ' in cloud '+args.tocloud
                                if args.tocloud else ''),
                             flush=True)
-                    new_vs, cloned_objs, warnings = cl.clone_vs(args.vs_name,
-                                            new_vs_name, args.enable, new_vips,
-                                            new_fips, new_fqdns, args.segroup,
-                                            args.tenant, args.totenant,
-                                            args.tocloud, force_clone,
-                                            False)
+                    new_vs, cloned_objs, warnings = cl.clone_vs(
+                             old_vs_name=args.vs_name, new_vs_name=new_vs_name,
+                             enable_vs=args.enable, new_vs_vips=new_vips,
+                             new_vs_fips=new_fips, new_fqdns=new_fqdns,
+                             new_segroup=args.segroup, tenant=args.tenant,
+                             other_tenant=args.totenant,
+                             other_cloud=args.tocloud, force_clone=force_clone,
+                             use_internal_ipam=args.internalipam)
                     all_created_objs.append(new_vs)
                     all_created_objs.extend(cloned_objs)
                     if warnings:
@@ -1931,14 +1982,26 @@ clone_vs.py -c controller.acme.com -x 17.2.9 vs example cloned-example
 
 clone_vs.py -c controller1.acme.com -dc controller2.acme.com -x 17.2.9
   generic health-monitor cloned-health-monitor -t tenant1 -2t tenant2
+  -2c Default-Cloud
+
+* Cloning a VS to a different controller with an AWS cloud, specifying
+  auto-allocation for VIPs by subnet in 3 AZs:
+
+clone_vs.py -c controller1.acme.com -dc controller2.acme.com -x 17.2.9
+  example cloned-example -v 10.0.0.0/24,10.1.0.0/24,10.2.0.0/24
+  -t tenant -2t tenant -2c AWS-Cloud
+
+* As above but also with elastic IP allocation:
+
+clone_vs.py -c controller1.acme.com -dc controller2.acme.com -x 17.2.9
+  example cloned-example -v 10.0.0.0/24,10.1.0.0/24,10.2.0.0/24;*,*,*
+  -t tenant -2t tenant -2c AWS-Cloud
 
 If the object to be cloned uses features specific to a particular minimum Avi
 Vantage s/w release, it may be necessary to specify the API version using the
 -x parameter.
 
 Some known limitations:
-* Cloning a VS with automatic address allocation to a different cloud is likely
-  to fail (unless static VIPs/FIPs are specified)
 * Cloning a VS to a cloud of a different type to the source cloud is more
   likely to fail as it may reference shared objects which do not make sense in
   the destination cloud

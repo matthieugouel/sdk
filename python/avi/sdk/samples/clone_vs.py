@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.ERROR)
 
 urllib3.disable_warnings()
 
-DEFAULT_API_VERSION = '16.4.2'
+DEFAULT_API_VERSION = '16.4.4'
 
 AVICLONE_VERSION = [1, 0, 5]
 

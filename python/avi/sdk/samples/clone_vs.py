@@ -1485,6 +1485,125 @@ class AviClone:
 # MAIN PROGRAM
 
 if __name__ == '__main__':
+    HELP_STR = '''    
+        For detailed help on cloning a specific object, use for
+        example:
+        clone_vs.py vs -h
+        
+        The script allows the cloning of virtual services, pools,
+        pool groups and generic objects (that have no child
+        references).
+        
+        The script clones any additional objects that are required,
+        so for example when cloning a virtual service, the pools
+        and/or pool groups used by that VS, including any specified
+        in context-switching rules, will also be cloned.
+        
+        The script also allows the cloning of objects into a
+        different tenant and/or cloud than the source - the
+        destination may also be on a different Avi Vantage
+        controller.
+        
+        These advanced cloning options may not always be successful
+        because the source and destination tenant/cloud/controllers
+        may have different properties. If the clone attempt fails,
+        the script will automatically delete any objects that it
+        created along the way.
+        
+        By default, re-usable child objects/profiles such as
+        application profiles, health monitors, persistency profiles
+        etc. are not cloned so that the cloned object simply refers
+        to the same child objects as the original.
+        
+        However, when cloning to a different tenant, the behaviour
+        is slightly different:
+        
+        If a re-usable object was defined in the admin tenant, it is
+        available in all tenants and will not be cloned by default.
+        If a re-usable objects was defined in the source tenant, the
+        script will use an identically-named object in the target
+        tenant if one is found. Otherwise, the object will be cloned
+        to the destination.
+        
+        This behaviour can be overridden using the "forceclone"
+        option which ensures that the specified references are
+        always cloned rather than re-used.
+        
+        For example, to forcibly clone all health monitors, use the
+        option:
+        
+        --forceclone pool-healthmonitor
+        
+        The full list of supported options is displayed in the help.
+        
+        Examples:
+        
+        * Cloning a VS and child objects within a tenant:
+        
+        clone_vs.py -c controller.acme.com -x 17.2.9 vs
+        example cloned-example
+        
+        
+        * Cloning a VS and child objects to a different tenant:
+        
+        clone_vs.py -c controller.acme.com -x 17.2.9 vs
+        example cloned-example -t tenant1 -2t tenant2
+        
+        
+        * Cloning a VS but forcing health monitors and application
+        profiles to be cloned rather than re-used in the cloned VS:
+        
+        clone_vs.py -c controller.acme.com -x 17.2.9 vs
+        example cloned-example -fc pool-healthmonitor,vs-appprofile
+        
+        
+        * Cloning an application profile to a different tenant on a
+        different controller:
+        
+        clone_vs.py -c controller1.acme.com -dc controller2.acme.com
+        -x 17.2.9 generic health-monitor cloned-health-monitor
+        -t tenant1 -2t tenant2 -2c Default-Cloud
+        
+        
+        * Cloning a VS to a different controller with an AWS cloud,
+        specifying auto-allocation for VIPs by subnet in 3 AZs:
+        
+        clone_vs.py -c controller1.acme.com -dc controller2.acme.com
+        -x 17.2.9 example cloned-example
+        -v 10.0.0.0/24,10.1.0.0/24,10.2.0.0/24
+        -t tenant -2t tenant -2c AWS-Cloud
+        
+        
+        * As above but also with elastic IP allocation:
+        
+        clone_vs.py -c controller1.acme.com -dc controller2.acme.com
+        -x 17.2.9 example cloned-example
+        -v 10.0.0.0/24,10.1.0.0/24,10.2.0.0/24;*,*,*
+        -t tenant -2t tenant -2c AWS-Cloud
+        
+        If the object to be cloned uses features specific to a
+        particular minimum Avi Vantage s/w release, it may be
+        necessary to specify the API version using the -x parameter.
+        
+        Some known limitations:
+        
+        * Cloning a VS to a cloud of a different type to the source
+        cloud is more likely to fail as it may reference shared
+        objects which do not make sense in the destination cloud.
+    
+        * Cloning a VS to a different tenant/cloud will try to find
+        an SE group with the same name as referenced in the source
+        VS but if no match is found, will place into the Default SE
+        group instead.
+        
+        * The script has been primarily written for and tested with
+        Linux Server/VMWare/AWS clouds - it may not work as-is for
+        other clouds.
+        
+        * Under bash on Linux, remember to escape the * character
+        with a backslash if passed as a parameter (e.g. in -v).
+    '''
+
     print('%s version %s' % (sys.argv[0], '.'.join(str(v) for v in
                                                    AVICLONE_VERSION)))
     print()
@@ -1499,7 +1618,9 @@ if __name__ == '__main__':
     vs_valid_refs = sorted(set(pool_valid_refs) |
                          set(AviClone.VALID_VS_REF_OBJECTS.keys()))
 
-    parser = argparse.ArgumentParser(description='')
+    parser = argparse.ArgumentParser(
+                        formatter_class=argparse.RawDescriptionHelpFormatter,
+                        epilog=(HELP_STR))
     parser.add_argument('-c', '--controller',
                         help='FQDN or IP address of Avi Vantage controller')
     parser.add_argument('-u', '--user', help='Avi Vantage username',
@@ -1896,95 +2017,4 @@ if __name__ == '__main__':
             print()
             print(ex)
     else:
-        # If run with no parameters, display general help text for the script
-
-        spprint(
-            'For syntax help, use:\r\n'
-            'clone_vs.py -h\r\n\r\n'
-            'For detailed help on cloning a specific object, use for example:\r\n'
-            'clone_vs.py vs -h\r\n\r\n'
-            'The script allows the cloning of virtual services, pools, pool '
-            'groups and generic objects (that have no child references).\r\n\r\n'
-            'The script clones any additional objects that are required, so for '
-            'example when cloning a virtual service, the pools and/or pool '
-            'groups used by that VS, including any specified in '
-            'context-switching rules, will also be cloned.\r\n\r\n'
-            'The script also allows the cloning of objects into a different '
-            'tenant and/or cloud than the source - the destination may also be '
-            'on a different Avi Vantage controller.\r\n\r\n'
-            'These advanced cloning options may not always be successful because '
-            'the source and destination tenant/cloud/controllers may have '
-            'different properties. If the clone attempt fails, the script will '
-            'automatically delete any objects that it created along the '
-            'way.\r\n\r\n'
-            'By default, re-usable child objects/profiles such as application '
-            'profiles, health monitors, persistency profiles etc. are not '
-            'cloned so that the cloned object simply refers to the same '
-            'child objects as the original.\r\n\r\n'
-            'However, when cloning to a different tenant, the behaviour is '
-            'slightly different:\r\n\r\n'
-            'If a re-usable object was defined in the admin tenant, it is '
-            'available in all tenants and will not be cloned by default. If a '
-            're-usable objects was defined in the source tenant, the script '
-            'will use an identically-named object in the target tenant if one '
-            'is found. Otherwise, the object will be cloned to the '
-            'destination.\r\n\r\n'
-            'This behaviour can be overridden using the "forceclone" option '
-            'which ensures that the specified references are always cloned '
-            'rather than re-used.\r\n\r\n'
-            'For example, to forcibly clone all health monitors, use the '
-            'option:\r\n\r\n'
-            '--forceclone pool-healthmonitor\r\n\r\n'
-            'The full list of supported options is displayed in the help.\r\n\r\n'
-            'Examples:\r\n\r\n'
-            '* Cloning a VS and child objects within a tenant:\r\n\r\n')
-        print(
-            'clone_vs.py -c controller.acme.com -x 17.2.9 vs example '
-            'cloned-example\r\n\r\n')
-        spprint(
-            '* Cloning a VS and child objects to a different tenant:\r\n\r\n')
-        print(
-            'clone_vs.py -c controller.acme.com -x 17.2.9 vs example '
-            'cloned-example -t tenant1 -2t tenant2\r\n\r\n')
-        spprint(
-            '* Cloning a VS but forcing health monitors and application '
-            'profiles to be cloned rather than re-used in the cloned VS:\r\n\r\n')
-        print(
-            'clone_vs.py -c controller.acme.com -x 17.2.9 vs example '
-            'cloned-example -fc pool-healthmonitor,vs-appprofile\r\n\r\n')
-        spprint(
-            '* Cloning an application profile to a different tenant on a '
-            'different controller:\r\n\r\n')
-        print(
-            'clone_vs.py -c controller1.acme.com -dc controller2.acme.com -x '
-            '17.2.9 generic health-monitor cloned-health-monitor -t tenant1 '
-            '-2t tenant2 -2c Default-Cloud\r\n\r\n')
-        spprint(
-            '* Cloning a VS to a different controller with an AWS cloud, '
-            'specifying auto-allocation for VIPs by subnet in 3 AZs:\r\n\r\n')
-        print(
-            'clone_vs.py -c controller1.acme.com -dc controller2.acme.com -x '
-            '17.2.9 example cloned-example -v 10.0.0.0/24,10.1.0.0/24,'
-            '10.2.0.0/24 -t tenant -2t tenant -2c AWS-Cloud\r\n\r\n')
-        spprint('* As above but also with elastic IP allocation:\r\n\r\n')
-        print(
-            'clone_vs.py -c controller1.acme.com -dc controller2.acme.com -x '
-            '17.2.9 example cloned-example -v 10.0.0.0/24,10.1.0.0/24,'
-            '10.2.0.0/24;*,*,* -t tenant -2t tenant -2c AWS-Cloud\r\n\r\n')
-        spprint(
-            'If the object to be cloned uses features specific to a particular '
-            'minimum Avi Vantage s/w release, it may be necessary to specify '
-            'the API version using the -x parameter.\r\n\r\n'
-            'Some known limitations:\r\n\r\n'
-            '* Cloning a VS to a cloud of a different type to the source cloud '
-            'is more likely to fail as it may reference shared objects which '
-            'do not make sense in the destination cloud.\r\n\r\n'
-            '* Cloning a VS to a different tenant/cloud will try to find an SE '
-            'group with the same name as referenced in the source VS but if no '
-            'match is found, will place into the Default SE group '
-            'instead.\r\n\r\n'
-            '* The script has been primarily written for and tested with '
-            'Linux Server/VMWare/AWS clouds - it may not work as-is for other '
-            'clouds.\r\n\r\n'
-            '* Under bash on Linux, remember to escape the * character with a '
-            'backslash if passed as a parameter (e.g. in -v).\r\n')
+        parser.print_help()

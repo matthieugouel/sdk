@@ -239,8 +239,7 @@ class AviClone:
             object_type = old_name.split('/')[0]
 
         logger.debug('Cloning %s "%s" to "%s"', object_type,
-                                                old_name,
-                                                new_name)
+                     old_name, new_name)
 
         if old_name.startswith(object_type + '/'):
             old_obj = self.api.get(old_name, tenant_uuid=tenant_uuid,

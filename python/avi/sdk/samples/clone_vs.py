@@ -19,7 +19,7 @@ urllib3.disable_warnings()
 
 DEFAULT_API_VERSION = '16.4.4'
 
-AVICLONE_VERSION = [1, 0, 5]
+AVICLONE_VERSION = [1, 1, 0]
 
 # Try to obtain the terminal width to allow spprint() to wrap output neatly.
 # If unable to determine, assume terminal width is 70 characters
@@ -32,7 +32,8 @@ except:
 def spprint(s, ind='', **kwargs):
     flush = kwargs.pop('flush', False)
     for para in s.splitlines():
-        print('\r\n'.join(textwrap.wrap(para, width=T_SIZE, subsequent_indent=ind,
+        print('\r\n'.join(textwrap.wrap(para, width=T_SIZE,
+                                        subsequent_indent=ind,
                                         break_on_hyphens=False)), **kwargs)
     if flush:
         f = kwargs.get('file', sys.stdout)
@@ -164,8 +165,8 @@ class AviClone:
         """
 
         t_obj, tenant, tenant_uuid = self._get_obj_info(obj_type='tenant',
-                                                        obj_name=tenant,
-                                                        api_to_use=self.dest_api)
+                                                     obj_name=tenant,
+                                                     api_to_use=self.dest_api)
 
         self._delete_created_objs(objs, tenant_uuid)
 
@@ -222,10 +223,10 @@ class AviClone:
             other_tenant = tenant
 
         ot_obj, other_tenant, otenant_uuid = self._get_obj_info(
-                                                         obj_type='tenant',
-                                                         obj=ot_obj,
-                                                         obj_name=other_tenant,
-                                                         api_to_use=self.dest_api)
+                                                 obj_type='tenant',
+                                                 obj=ot_obj,
+                                                 obj_name=other_tenant,
+                                                 api_to_use=self.dest_api)
         
         oc_obj, other_cloud, ocloud_uuid = self._get_obj_info(obj_type='cloud',
                                                  obj=oc_obj,
@@ -1044,9 +1045,9 @@ class AviClone:
         return created_objs
 
     def clone_vs(self, old_vs_name, new_vs_name, enable_vs=False,
-                 new_vs_vips=None, new_vs_fips=None, new_fqdns=None,
-                 new_segroup=None, tenant=None, other_tenant=None,
-                 other_cloud=None, force_clone=None,
+                 new_vs_vips=None, new_vs_v6vips=None, new_vs_fips=None,
+                 new_fqdns=None, new_segroup=None, tenant=None,
+                 other_tenant=None, other_cloud=None, force_clone=None,
                  use_internal_ipam=False):
 
         """
@@ -1066,6 +1067,10 @@ class AviClone:
                             also use auto-allocation) or specify a list
                             of subnets/masks to auto-allocate in different
                             networks than the source - see use_internal_ipam
+        :param new_vs_v6vips: List of V6 VIPs for cloned VS or specify a 
+                              list of subnets/masks to auto-allocate in
+                              different networks than the source. If specified,
+                              number of V4 and V6 VIPs must be the same
         :param new_vs_fips: List of FIPs for cloned VS or [None] if FIPs are
                             not used (must have same number of elements as
                             new_vs_vips if specified)
@@ -1099,8 +1104,10 @@ class AviClone:
                      old_vs_name, new_vs_name)
 
         force_clone = force_clone or []
-        new_vs_vips = new_vs_vips or ['*']
+        new_vs_vips = new_vs_vips or ([None * len(new_vs_v6vips)]
+                                      if new_vs_v6vips else ['*']) 
         new_vs_fips = new_vs_fips or [None * len(new_vs_vips)]
+        new_vs_v6vips = new_vs_v6vips or [None * len(new_vs_vips)]
         new_fqdns = new_fqdns or ['*']
 
         t_obj, tenant, tenant_uuid = self._get_obj_info(obj_type='tenant',
@@ -1109,9 +1116,9 @@ class AviClone:
         other_tenant = other_tenant or tenant
 
         ot_obj, other_tenant, otenant_uuid = self._get_obj_info(
-                                                         obj_type='tenant',
-                                                         obj_name=other_tenant,
-                                                         api_to_use=self.dest_api)
+                                                 obj_type='tenant',
+                                                 obj_name=other_tenant,
+                                                 api_to_use=self.dest_api)
         
         oc_obj, other_cloud, ocloud_uuid = self._get_obj_info(obj_type='cloud',
                                                  obj_name=other_cloud,
@@ -1146,52 +1153,91 @@ class AviClone:
             # only populate the first VIP.
 
             if new_vs_vips == ['*']:
+                # Use auto-allocation from the same subnets as the source
+                # VS (IPv4 and IPv6)
                 v_obj.pop('vsvip_ref', None)
                 for vip in v_obj['vip'] if 'vip' in v_obj else [v_obj]:
                     vip.pop('port_uuid', None)
                     if vip['auto_allocate_ip'] is True:
                         vip.pop('ip_address', None)
+                        vip.pop('ip6_address', None)
                     else:
                         raise Exception('Existing VS does not have '
                                         'auto-allocate enabled')
                     if vip['auto_allocate_floating_ip'] is True:
                         vip.pop('floating_ip', None)
             else:
+                # Update VIPs in destination VS
+                if len(new_vs_vips) != len(new_vs_v6vips):
+                    raise Exception('Number of V4 and V6 VIPs should match.')
+
                 if 'vip' in v_obj:
                     v_obj.pop('vip', None)
                     v_obj.pop('vsvip_ref', None)
                     v_obj['vip'] = []
-                    for c, (new_vs_vip, new_vs_fip) in enumerate(
-                                                zip(new_vs_vips, new_vs_fips)):
+                    for c, (new_vs_vip,
+                            new_vs_fip,
+                            new_vs_v6vip) in enumerate(zip(new_vs_vips,
+                                                           new_vs_fips,
+                                                           new_vs_v6vips)):
                         new_vip = {'enabled': True,
-                                    'vip_id': str(c+1)}
-                        if '/' in new_vs_vip:
-                            new_vip['auto_allocate_ip'] = True
-                            subnet = new_vs_vip.split('/')
-                            if use_internal_ipam:
-                                new_vip['ipam_network_subnet'] = {'subnet': {
-                                                       'ip_addr': {
-                                                           'type': 'V4',
-                                                           'addr': subnet[0]},
-                                                       'mask': int(subnet[1])}}
+                                   'vip_id': str(c+1)}
+                        if new_vs_vip:
+                            if '/' in new_vs_vip:
+                                new_vip['auto_allocate_ip'] = True
+                                subnet = new_vs_vip.split('/')
+                                if use_internal_ipam:
+                                    new_vip['ipam_network_subnet'] = {
+                                        'subnet': {
+                                            'ip_addr': {
+                                                'type': 'V4',
+                                                'addr': subnet[0]},
+                                            'mask': int(subnet[1])}}
+                                else:
+                                    new_vip['subnet'] = {
+                                        'ip_addr': {'type': 'V4',
+                                                    'addr': subnet[0]},
+                                        'mask': int(subnet[1])}
                             else:
-                                new_vip['subnet'] = {'ip_addr': {
-                                                         'type': 'V4',
-                                                         'addr': subnet[0]},
-                                                     'mask': int(subnet[1])}
-                        else:
-                            new_vip['auto_allocate_ip'] = False
-                            new_vip['ip_address'] = {'type': 'V4',
-                                                     'addr': new_vs_vip}
+                                new_vip['auto_allocate_ip'] = False
+                                new_vip['ip_address'] = {'type': 'V4',
+                                                         'addr': new_vs_vip}
+                        if new_vs_v6vip:
+                            if '/' in new_vs_v6vip:
+                                new_vip['auto_allocate_ip'] = True
+                                if new_vs_vip:
+                                    new_vip['auto_allocate_ip_type'] = 'V4_V6'
+                                else:
+                                    new_vip['auto_allocate_ip_type'] = 'V6_ONLY'
+                                subnet = new_vs_v6vip.split('/')
+                                if use_internal_ipam:
+                                    new_vip['ipam_network_subnet'] = {
+                                        'subnet6': {
+                                            'ip_addr': {
+                                                'type': 'V6',
+                                                'addr': subnet[0]},
+                                            'mask': int(subnet[1])}}
+                                else:
+                                    new_vip['subnet6'] = {
+                                        'ip_addr': {'type': 'V6',
+                                                    'addr': subnet[0]},
+                                        'mask': int(subnet[1])}
+                            else:
+                                new_vip['auto_allocate_ip'] = False
+                                new_vip['ip6_address'] = {'type': 'V6',
+                                                         'addr': new_vs_v6vip}
+
                         if new_vs_fip:
                             if new_vs_fip == '*':
                                 new_vip['auto_allocate_floating_ip'] = True
                             else:
                                 new_vip['auto_allocate_floating_ip'] = False
-                                new_vip['floating_ip'] = {'type': 'V4',
-                                                          'addr': new_vs_fip}
+                                new_vip['floating_ip'] = {
+                                    'type': 'V4',
+                                    'addr': new_vs_fip}
                         else:
                             new_vip['auto_allocate_floating_ip'] = False
+
                         v_obj['vip'].append(new_vip)
                 else:
                     if '/' in new_vs_vips[0]:
@@ -1280,7 +1326,7 @@ class AviClone:
             v_obj_old_url = v_obj.pop('url', None)
             v_obj.pop('vip_runtime', None)
             v_obj['name'] = new_vs_name
-
+            
             # Remove site persistency references
 
             if v_obj.pop('sp_pool_refs', None):
@@ -1580,6 +1626,18 @@ if __name__ == '__main__':
         -v 10.0.0.0/24,10.1.0.0/24,10.2.0.0/24;*,*,*
         -t tenant -2t tenant -2c AWS-Cloud
         
+
+        * Cloning a VS in 18.1 and above with a static IPv4 and IPv6
+        address:
+
+        clone_vs.py -c controller1.acme.com -x 18.1.2 example cloned-example
+        -v 10.0.0.10 -v6 fd00:dead:beef:bad:f00d::10
+
+        * Cloning a VS in 18.1 with new auto-allocation for IPv4 and IPv6:
+
+        clone_vs.py -c controller1.acme.com -x 18.1.2 example cloned-example
+        -v 10.0.0.0/16 -v6 fd00:dead:beef:bad:f00d::/64
+
         If the object to be cloned uses features specific to a
         particular minimum Avi Vantage s/w release, it may be
         necessary to specify the API version using the -x parameter.
@@ -1650,8 +1708,11 @@ if __name__ == '__main__':
                help='Name(s) to be assigned to the cloned Virtual Service(s)')
     vs_parser.add_argument('-v', '--vips',
           help='The new VIP or list of VIPs (optionally specify list of FIPs '
-          'after ;) or * or subnet/mask for auto-allocation', metavar='VIPs',
-          default='*')
+          'after ;) or * or subnet/mask for auto-allocation', metavar='VIPs')
+    vs_parser.add_argument('-v6', '--v6vips',
+          help='The new IP V6 VIP or list of VIPs '
+          'or * or subnet/mask for auto-allocation', metavar='V6VIPs')
+
     vs_parser.add_argument('-int', '--internalipam',
           help='For auto-allocation specifying subnet/mask, allocate '
                'from internal Avi IPAM/Infoblox, e.g. for VMWare Clouds',
@@ -1758,6 +1819,8 @@ if __name__ == '__main__':
         user2 = args.destuser
         password2 = args.destpassword
 
+        all_created_objs = []
+
         try:
             while not controller:
                 controller = input('Controller:')
@@ -1803,8 +1866,6 @@ if __name__ == '__main__':
             force_clone = (args.forceclone.split(',')
                            if args.forceclone else None)
 
-            all_created_objs = []
-
             if args.obj_type == 'vs':
                 # Loop through the clone names and clone the source VS for
                 # each destination
@@ -1812,39 +1873,59 @@ if __name__ == '__main__':
                 new_vs_names = args.new_vs_names.split(',')
                 num_new_vs = len(new_vs_names)
 
-                vipsfips = args.vips.split(';')
-                vips = (['*'] * num_new_vs
-                        if args.vips == '*' else vipsfips[0].split(','))
-                fips = ([None] * len(vips)
+                if args.vips:
+                    vipsfips = args.vips.split(';')
+                    vips = (['*'] * num_new_vs
+                            if args.vips == '*' else vipsfips[0].split(','))
+                    fips = ([None] * len(vips)
                         if (args.vips == '*' or len(vipsfips) == 1)
                         else vipsfips[1].split(','))
+                else:
+                    if args.v6vips:
+                        vips = [None] * num_new_vs
+                    else:
+                        vips = ['*']
+                    fips = [None] * len(vips)
+                
                 fqdns = (['*'] * num_new_vs
                          if args.fqdns == '*' else args.fqdns.split(',')
                          if args.fqdns else [None] * num_new_vs)
+                v6vips = ([None] * len(vips)
+                          if not args.v6vips else args.v6vips.split(','))
 
                 if num_new_vs == 1:
                     # If we only have a single destination VS name, assume the
                     # provided VIPs/FIPs/FQDNs are multi-values for a single
                     # VS rather than values per new VS
 
+                    if len(vips) != len(v6vips):
+                        raise Exception('Number of VIPs and V6 VIPs'
+                                        'should match.')
+
                     vips = [vips]
                     fips = [fips]
                     fqdns = [fqdns]
+                    v6vips = [v6vips]
                 else:
                     # Otherwise, make sure we have the same number of VIPs,
                     # FIPs, FQDNs as the number of provided VS names
 
-                    if len(vips) == len(fips) == len(fqdns) == num_new_vs:
+                    if (len(vips) == len(fips) ==
+                        len(fqdns) == len(v6vips) == 
+                        num_new_vs):
                         vips = [[vip] for vip in vips]
                         fips = [[fip] for fip in fips]
                         fqdns = [[fqdn] for fqdn in fqdns]
+                        v6vips = [[v6vip] for v6vip in v6vips]
                     else:
                         raise Exception('Number of VIPs, FIPs and FQDNs '
                                         'specified should match the number of '
                                         'new virtual services')
 
-                for new_vs_name, new_vips, new_fips, new_fqdns in \
-                        zip(new_vs_names, vips, fips, fqdns):
+                for (new_vs_name, new_vips,
+                     new_fips, new_fqdns, new_v6vips) in zip(new_vs_names,
+                                                              vips, fips,
+                                                              fqdns, v6vips):
                     spprint('Trying to clone VS %s%s to %s%s%s...'
                             % (args.vs_name, ' ['+args.tenant+']'
                                if args.tenant else '',
@@ -1857,6 +1938,7 @@ if __name__ == '__main__':
                     new_vs, cloned_objs, warnings = cl.clone_vs(
                              old_vs_name=args.vs_name, new_vs_name=new_vs_name,
                              enable_vs=args.enable, new_vs_vips=new_vips,
+                             new_vs_v6vips=new_v6vips,
                              new_vs_fips=new_fips, new_fqdns=new_fqdns,
                              new_segroup=args.segroup, tenant=args.tenant,
                              other_tenant=args.totenant,
@@ -1876,9 +1958,22 @@ if __name__ == '__main__':
 
                     print('New Virtual Service created as follows:')
                     print('%10s: %s' % ('Name', new_vs['name']))
-                    print('%10s: %s' % ('VIP(s)', ','.join([ipa['ip_address'][
-                                        'addr'] for ipa in new_vs['vip']]) if
-                            'vip' in new_vs else new_vs['ip_address']['addr']))
+                    try:
+                        v4_vips = ([ipa['ip_address']['addr']
+                                    for ipa in new_vs['vip']]
+                                   if 'vip' in new_vs
+                                   else [new_vs['ip_address']['addr']])
+                    except KeyError:
+                        v4_vips = []
+                    try:
+                        v6_vips = ([ipa['ip6_address']['addr']
+                                    for ipa in new_vs['vip']]
+                                   if 'vip' in new_vs
+                                   else [new_vs['ip6_address']['addr']])
+                    except KeyError:
+                        v6_vips = []
+
+                    print('%10s: %s' % ('VIP(s)', ','.join(v4_vips + v6_vips)))
                     print('%10s: %s' % ('FIP(s)', ','.join([(ipa['floating_ip'][
                                         'addr'] if 'floating_ip' in ipa else
                                         'N/A') for ipa in new_vs['vip']]) if
@@ -2004,6 +2099,12 @@ if __name__ == '__main__':
             for index, action in enumerate(cl.actions):
                 spprint('%2d. %s' % (index + 1, action), '    ')
 
+            
+
+        except Exception as ex:
+            print()
+            print(ex)
+        finally:
             if args.dryrun:
                 try:
                     input('Dry-run: Hit ENTER to delete all cloned objects')
@@ -2011,9 +2112,5 @@ if __name__ == '__main__':
                     pass
                 cl.delete_objects(objs=all_created_objs,
                                   tenant=args.totenant or args.tenant)
-
-        except Exception as ex:
-            print()
-            print(ex)
     else:
         parser.print_help()

@@ -37,8 +37,8 @@ class DataGroupConfigConv(object):
         """
 
         :param conv_status:  state of conversion
-        :param dg_type: type of datagroup
-        :param name: name of persistance profile
+        :param dg_type: type of data group
+        :param name: name of data group
         :param data_group: dict of data group
         :return:
         """
@@ -50,9 +50,9 @@ class DataGroupConfigConv(object):
     def update_conv_status_for_error(self, name, dg_type, key):
         """
 
-        :param name:  name of profile
-        :param persist_mode: type of profile.
-        :param key: key for profile
+        :param name:  name of data group
+        :param dg_type: type of data group.
+        :param key: key for data group
         :return:
         """
         if name:
@@ -81,7 +81,7 @@ class DataGroupConfigConv(object):
         # Added variable to get total object count.
         progressbar_count = 0
         total_size = len(f5_datagroup_dict.keys())
-        print "Converting Persistence Profiles..."
+        print "Converting Data groups..."
         for key in f5_datagroup_dict.keys():
             progressbar_count += 1
             data_group_type = None
@@ -94,7 +94,6 @@ class DataGroupConfigConv(object):
             dg_type = None
             try:
                 tenant, name = conv_utils.get_tenant_ref(key)
-                print tenant, name
                 # dg_scope, name = key.split(" ")
                 # name = name.split('/')[-1]
                 LOG.debug("Converting datagroup: %s" % name)
@@ -116,7 +115,7 @@ class DataGroupConfigConv(object):
                     continue
                 if not ip_group:
                     continue
-                # code to merge applicaation persistence profile.
+                # code to merge Data groups.
                 if self.object_merge_check:
                     conv_utils.update_skip_duplicates(
                         ip_group, avi_config['IpAddrGroup'], 'ip_group',
@@ -198,7 +197,6 @@ class DataGroupConfigConvV10(DataGroupConfigConv):
         prefixes = []
         for record in d_group['records']:
             for ip in record:
-                print ip
                 prefix = {
                     'mask': ip.split('/')[1],
                     'ip_addr': {

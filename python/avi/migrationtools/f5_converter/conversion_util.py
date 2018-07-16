@@ -302,8 +302,8 @@ class F5Util(MigrationUtil):
                                       obj.get("dup_of", []))]
             if ssl_profiles:
                 cert_name = ssl_profiles[0].get('cert_name', None)
-                if cert_name:
-                    print cert_name
+                if not cert_name:
+                    cert_name = name
                 ssl_key_cert_list = avi_config.get("SSLKeyAndCertificate", [])
                 sys_key_cert = sys_dict['SSLKeyAndCertificate']
                 key_cert = [ob for ob in sys_key_cert if ob['name'] ==

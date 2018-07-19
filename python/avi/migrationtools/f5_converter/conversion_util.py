@@ -427,7 +427,11 @@ class F5Util(MigrationUtil):
                 app_prof_conf['needs_review'] = True
                 value = 'http'
             else:
-                value = 'System-L4-Application'
+                app_profile_refs.append(
+                    self.get_object_ref('System-L4-Application',
+                                        'applicationprofile', tenant='admin'))
+                app_prof_conf['app_prof'] = app_profile_refs
+                return app_prof_conf
             # Added prefix for objects
             if prefix:
                 value = '%s-%s' % (prefix, value)
